@@ -3,7 +3,7 @@
 
   "api": {
     "_comment": "Optional external IP/country lookup API (Cloudflare Worker). Used only as an EXTRA verification source; the built-in providers in get_country_from_ip() are tried first because they are faster and more reliable.",
-    "base_url": "https://odd-mouse-8826.admin789-474.workers.dev",
+    "base_url": "https://dry-thunder-684c.4j89drj49rd-14070.workers.dev",
     "endpoints": {
       "tor_check": "/tor-check",
       "lookup": "/lookup",
@@ -38,7 +38,8 @@
       { "code": "fi", "label": "Finland",         "port": 9056, "control_port": 9156, "inbound_port": 8087, "path": "/in7"  },
       { "code": "gb", "label": "United Kingdom",  "port": 9057, "control_port": 9157, "inbound_port": 8088, "path": "/in8"  },
       { "code": "es", "label": "Spain",           "port": 9058, "control_port": 9158, "inbound_port": 8089, "path": "/in9"  },
-      { "code": "ro", "label": "Romania",         "port": 9059, "control_port": 9159, "inbound_port": 8090, "path": "/in10" }
+      { "code": "ro", "label": "Romania",         "port": 9059, "control_port": 9159, "inbound_port": 8090, "path": "/in10" },
+      { "code": "ae", "label": "Dubai",           "port": 9060, "control_port": 9160, "inbound_port": 8091, "path": "/in11" }
     ],
 
     "verification": {
