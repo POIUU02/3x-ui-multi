@@ -38,8 +38,7 @@
       { "code": "fi", "label": "Finland",         "port": 9056, "control_port": 9156, "inbound_port": 8087, "path": "/in7"  },
       { "code": "gb", "label": "United Kingdom",  "port": 9057, "control_port": 9157, "inbound_port": 8088, "path": "/in8"  },
       { "code": "es", "label": "Spain",           "port": 9058, "control_port": 9158, "inbound_port": 8089, "path": "/in9"  },
-      { "code": "ro", "label": "Romania",         "port": 9059, "control_port": 9159, "inbound_port": 8090, "path": "/in10" },
-      { "code": "ae", "label": "Dubai",           "port": 9060, "control_port": 9160, "inbound_port": 8091, "path": "/in11" }
+      { "code": "ro", "label": "Romania",         "port": 9059, "control_port": 9159, "inbound_port": 8090, "path": "/in10" }
     ],
 
     "verification": {
