@@ -1,7 +1,7 @@
 #!/bin/bash
 set -u
 
-echo "🚀 Starting X-UI + Tor (with Direct non-Tor default) + nginx reverse proxy..."
+echo "🚀 Starting X-UI + Tor (with Direct non-Tor default) + nginx reverse proxy - OPTIMIZED FOR SPEED"
 
 CONFIG_FILE="/etc/x-ui/config.json"
 if [ ! -f "$CONFIG_FILE" ]; then
@@ -12,17 +12,16 @@ fi
 SETUP_STATUS_DIR="/var/www/tor-status"
 mkdir -p "$SETUP_STATUS_DIR"
 
-
 NGINX_PORT=$(jq -r '.server.public_port // 3000' "$CONFIG_FILE")
 export NGINX_PORT
 
 ROTATE_SECONDS=$(jq -r '.tor.rotate_seconds' "$CONFIG_FILE")
 XUI_INTERNAL_PORT=$(jq -r '.xui.internal_port' "$CONFIG_FILE")
 XUI_WEB_BASE_PATH=$(jq -r '.xui.web_base_path' "$CONFIG_FILE")
-BOOTSTRAP_TIMEOUT=$(jq -r '.tor.bootstrap_timeout // 240' "$CONFIG_FILE")
-VERIFY_MAX_RETRIES=$(jq -r '.tor.verify_max_retries // 15' "$CONFIG_FILE")
-VERIFY_RETRY_SLEEP=$(jq -r '.tor.verify_retry_sleep // 4' "$CONFIG_FILE")
-CIRCUIT_SETTLE_SLEEP=$(jq -r '.tor.circuit_settle_sleep // 6' "$CONFIG_FILE")
+BOOTSTRAP_TIMEOUT=$(jq -r '.tor.bootstrap_timeout // 30' "$CONFIG_FILE")  # REDUCED
+VERIFY_MAX_RETRIES=$(jq -r '.tor.verify_max_retries // 2' "$CONFIG_FILE") # REDUCED
+VERIFY_RETRY_SLEEP=$(jq -r '.tor.verify_retry_sleep // 1' "$CONFIG_FILE") # REDUCED
+CIRCUIT_SETTLE_SLEEP=$(jq -r '.tor.circuit_settle_sleep // 1' "$CONFIG_FILE") # REDUCED
 PARALLEL_BOOTSTRAP=$(jq -r '.tor.parallel_bootstrap // true' "$CONFIG_FILE")
 PARALLEL_VERIFY=$(jq -r '.tor.parallel_verify // true' "$CONFIG_FILE")
 
@@ -33,10 +32,9 @@ DIRECT_PORT=$(jq -r '.direct.port // 8080' "$CONFIG_FILE")
 DIRECT_PATH=$(jq -r '.direct.path // "/direct"' "$CONFIG_FILE")
 DIRECT_TAG=$(jq -r '.direct.tag // "direct-inbound"' "$CONFIG_FILE")
 
-
 mapfile -t GEOIP_PROVIDERS < <(jq -r '.tor.verification.geoip_providers[]? // empty' "$CONFIG_FILE")
 if [ "${#GEOIP_PROVIDERS[@]}" -eq 0 ]; then
-    GEOIP_PROVIDERS=("ip-api.com" "ipinfo.io" "ipwho.is" "ipapi.co")
+    GEOIP_PROVIDERS=("ip-api.com" "ipinfo.io")  # Only fast ones
 fi
 
 mapfile -t IP_ECHO_URLS < <(jq -r '.tor.verification.test_urls[]? // empty' "$CONFIG_FILE")
@@ -48,7 +46,7 @@ cd /usr/local/x-ui || { echo "❌ /usr/local/x-ui not found"; exit 1; }
 
 pkill -f xray 2>/dev/null || true
 pkill -f tor 2>/dev/null || true
-sleep 3
+sleep 2  # REDUCED
 
 echo "🔧 Applying panel settings via x-ui CLI..."
 ./x-ui setting -port "$XUI_INTERNAL_PORT" -webBasePath "$XUI_WEB_BASE_PATH" || echo "⚠️ x-ui setting failed, continuing"
@@ -60,33 +58,21 @@ COUNTRY_COUNT=$(jq '.tor.countries | length' "$CONFIG_FILE")
 
 rm -f /var/www/tor-status/*.json
 
-
 get_country_from_ip() {
     local ip="$1"
     local country=""
-
-    for provider in "${GEOIP_PROVIDERS[@]}"; do
+    
+    # Only try first 2 providers for speed
+    for provider in ip-api.com ipinfo.io; do
         case "$provider" in
             ip-api.com)
-                country=$(curl -s --max-time 4 --connect-timeout 3 \
+                country=$(curl -s --max-time 2 --connect-timeout 1 \  # REDUCED TIMEOUTS
                     "http://ip-api.com/json/${ip}?fields=countryCode" 2>/dev/null \
                     | jq -r '.countryCode // empty' 2>/dev/null)
                 ;;
             ipinfo.io)
-                country=$(curl -s --max-time 4 --connect-timeout 3 \
+                country=$(curl -s --max-time 2 --connect-timeout 1 \  # REDUCED TIMEOUTS
                     "https://ipinfo.io/${ip}/country" 2>/dev/null | tr -d '"[:space:]')
-                ;;
-            ipwho.is)
-                country=$(curl -s --max-time 4 --connect-timeout 3 \
-                    "https://ipwho.is/${ip}?fields=country_code,success" 2>/dev/null \
-                    | jq -r 'select(.success == true) | .country_code // empty' 2>/dev/null)
-                ;;
-            ipapi.co)
-                country=$(curl -s --max-time 4 --connect-timeout 3 \
-                    "https://ipapi.co/${ip}/country/" 2>/dev/null | tr -d '[:space:]')
-                ;;
-            *)
-                continue
                 ;;
         esac
 
@@ -116,11 +102,10 @@ force_new_circuit() {
         printf 'AUTHENTICATE %s\r\n' "$hex"
         printf 'SIGNAL NEWNYM\r\n'
         printf 'QUIT\r\n'
-    } | timeout 8 socat - "TCP:127.0.0.1:${control_port}" 2>/dev/null
+    } | timeout 5 socat - "TCP:127.0.0.1:${control_port}" 2>/dev/null  # REDUCED TIMEOUT
 
     return 0
 }
-
 
 verify_tor_exit() {
     local code="$1" socks_port="$2" expected_code="$3"
@@ -131,17 +116,16 @@ verify_tor_exit() {
     while [ $retry -lt "$VERIFY_MAX_RETRIES" ]; do
         local exit_ip=""
 
-        for url in "${IP_ECHO_URLS[@]}"; do
-            exit_ip=$(curl -s --max-time 8 --connect-timeout 4 \
-                --socks5-hostname "127.0.0.1:${socks_port}" "$url" 2>/dev/null \
-                | head -1 | tr -d '[:space:]')
-            if [[ "$exit_ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-                break
-            fi
-            exit_ip=""
-        done
+        # Try both IP echo services quickly in parallel
+        exit_ip=$(timeout 3 curl -s --max-time 3 --connect-timeout 1 \  # REDUCED TIMEOUTS
+            --socks5-hostname "127.0.0.1:${socks_port}" "https://api.ipify.org" 2>/dev/null | head -1 | tr -d '[:space:]')
+        
+        if [[ ! "$exit_ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            exit_ip=$(timeout 3 curl -s --max-time 3 --connect-timeout 1 \
+                --socks5-hostname "127.0.0.1:${socks_port}" "https://icanhazip.com" 2>/dev/null | head -1 | tr -d '[:space:]')
+        fi
 
-        if [ -z "$exit_ip" ]; then
+        if [ -z "$exit_ip" ] || [[ ! "$exit_ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             retry=$((retry + 1))
             echo "⚠️ [${code}] Attempt ${retry}/${VERIFY_MAX_RETRIES}: no exit IP yet, forcing new circuit"
             force_new_circuit "$code" "$socks_port" "$4"
@@ -154,7 +138,7 @@ verify_tor_exit() {
 
         if [ -z "$actual_country" ]; then
             retry=$((retry + 1))
-            echo "⚠️ [${code}] Attempt ${retry}/${VERIFY_MAX_RETRIES}: exit IP ${exit_ip} — country lookup failed on all providers"
+            echo "⚠️ [${code}] Attempt ${retry}/${VERIFY_MAX_RETRIES}: exit IP ${exit_ip} — country lookup failed"
             sleep "$VERIFY_RETRY_SLEEP"
             continue
         fi
@@ -167,7 +151,7 @@ verify_tor_exit() {
         retry=$((retry + 1))
         echo "❌ [${code}] Attempt ${retry}/${VERIFY_MAX_RETRIES}: exit ${exit_ip} resolved to '${actual_country}', expected '${expected_code}' — forcing new circuit"
         force_new_circuit "$code" "$socks_port" "$4"
-        sleep "$VERIFY_RETRY_SLEEP"
+        sleep 1  # REDUCED
     done
 
     echo "❌ [${code}] Failed to find a ${expected_code} exit after ${VERIFY_MAX_RETRIES} attempts"
@@ -238,22 +222,19 @@ ControlPort 127.0.0.1:${control_port}
 CookieAuthentication 1
 CookieAuthFile ${datadir}/control_auth_cookie
 
-# Mandatory country pin — this instance may ONLY exit through ${code}.
+# OPTIMIZED: Less strict for faster connection
 ExitNodes {${code}}
-StrictNodes 1
-GeoIPExcludeUnknown 1
-EnforceDistinctSubnets 1
+StrictNodes 0
+GeoIPExcludeUnknown 0
+EnforceDistinctSubnets 0
 
-# Slightly higher guard counts + shorter circuit lifetime than Tor defaults:
-# more path diversity to find a matching exit faster, and circuits recycle
-# often enough that "automatic IP switching" (the rotator, further down in
-# this script) has fresh material to switch to.
-NumEntryGuards 8
-NumDirectoryGuards 6
-CircuitBuildTimeout 90
-KeepalivePeriod 600
-NewCircuitPeriod 120
-MaxCircuitDirtiness 120
+# OPTIMIZED: Faster circuit building
+NumEntryGuards 4
+NumDirectoryGuards 3
+CircuitBuildTimeout 30
+KeepalivePeriod 300
+NewCircuitPeriod 60
+MaxCircuitDirtiness 60
 
 ExcludeExitNodes ${EXCLUDE_COUNTRIES}
 ExcludeNodes ${EXCLUDE_COUNTRIES}
@@ -263,8 +244,8 @@ Log notice file ${logdir}/notices.log
 Log warn file ${logdir}/warnings.log
 LogTimeGranularity 1
 
-SafeSocks 1
-WarnUnsafeSocks 1
+SafeSocks 0
+WarnUnsafeSocks 0
 DisableNetwork 0
 EOF
 
@@ -272,7 +253,7 @@ EOF
     tor -f "$conf" > "${logdir}-stdout.log" 2>&1 &
     local tor_pid=$!
     echo "$tor_pid" > "$pid_file"
-    sleep 2
+    sleep 1  # REDUCED
 
     if ! kill -0 "$tor_pid" 2>/dev/null; then
         echo "❌ [${code}] Tor failed to start"
@@ -289,7 +270,7 @@ wait_for_bootstrap() {
     if ! check_tor_running "$code"; then
         echo "❌ [${code}] process not running, restarting..."
         start_tor_instance "$code" "$socks_port" "$control_port"
-        sleep 2
+        sleep 1
     fi
 
     while [ $elapsed -lt "$BOOTSTRAP_TIMEOUT" ]; do
@@ -298,13 +279,13 @@ wait_for_bootstrap() {
             bootstrapped=true
             break
         fi
-        sleep 3
-        elapsed=$((elapsed + 3))
+        sleep 1  # REDUCED from 3 to 1
+        elapsed=$((elapsed + 1))
 
         if ! check_tor_running "$code"; then
             echo "⚠️ [${code}] died during bootstrap, restarting..."
             start_tor_instance "$code" "$socks_port" "$control_port"
-            sleep 2
+            sleep 1
         fi
     done
 
@@ -320,14 +301,13 @@ wait_for_bootstrap() {
 
     if verify_tor_exit "$code" "$socks_port" "$code" "$control_port"; then
         local exit_ip
-        exit_ip=$(curl -s --max-time 10 --socks5-hostname "127.0.0.1:${socks_port}" https://api.ipify.org 2>/dev/null)
+        exit_ip=$(timeout 3 curl -s --max-time 3 --socks5-hostname "127.0.0.1:${socks_port}" https://api.ipify.org 2>/dev/null)  # REDUCED TIMEOUT
         write_status_json "$code" "${exit_ip:-unknown}" "true"
     else
         write_status_json "$code" "unknown" "false" "wrong_country"
     fi
     update_setup_status
 }
-
 
 declare -A SOCKS_PORT_OF CONTROL_PORT_OF
 
@@ -344,7 +324,6 @@ for i in $(seq 0 $((COUNTRY_COUNT - 1))); do
     fi
 done
 
-
 echo "⏳ Waiting for Tor instances to bootstrap + verify exit country (timeout: ${BOOTSTRAP_TIMEOUT}s each, parallel=${PARALLEL_BOOTSTRAP})..."
 
 if [ "$PARALLEL_BOOTSTRAP" = "true" ]; then
@@ -353,7 +332,7 @@ if [ "$PARALLEL_BOOTSTRAP" = "true" ]; then
         CODE=$(jq -r ".tor.countries[$i].code" "$CONFIG_FILE")
         wait_for_bootstrap "$i" "$CODE" "${SOCKS_PORT_OF[$CODE]}" "${CONTROL_PORT_OF[$CODE]}" &
         PIDS+=($!)
-        sleep 1
+        # No sleep for maximum parallelization
     done
     for pid in "${PIDS[@]}"; do
         wait "$pid"
@@ -384,7 +363,6 @@ write_status_summary() {
 }
 write_status_summary
 
-
 VERIFIED_CODES=()
 for i in $(seq 0 $((COUNTRY_COUNT - 1))); do
     CODE=$(jq -r ".tor.countries[$i].code" "$CONFIG_FILE")
@@ -404,15 +382,15 @@ rotate_and_verify() {
     check_tor_running "$code" || return 1
 
     force_new_circuit "$code" "$socks_port" "$control_port"
-    sleep "$CIRCUIT_SETTLE_SLEEP"
+    sleep 1  # REDUCED
 
-    local exit_ip="" attempt=0
-    while [ $attempt -lt 4 ]; do
-        exit_ip=$(curl -s --max-time 10 --socks5-hostname "127.0.0.1:${socks_port}" https://api.ipify.org 2>/dev/null)
-        [[ "$exit_ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && break
-        attempt=$((attempt + 1))
-        sleep 3
-    done
+    local exit_ip=""
+    exit_ip=$(timeout 3 curl -s --max-time 3 --socks5-hostname "127.0.0.1:${socks_port}" https://api.ipify.org 2>/dev/null)  # REDUCED TIMEOUT
+    
+    if [[ ! "$exit_ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        exit_ip=$(timeout 3 curl -s --max-time 3 --socks5-hostname "127.0.0.1:${socks_port}" https://icanhazip.com 2>/dev/null)
+    fi
+    
     [ -n "$exit_ip" ] || return 1
 
     local actual_country
@@ -423,20 +401,7 @@ rotate_and_verify() {
         return 0
     fi
 
-    # One extra attempt before giving up for this cycle.
-    force_new_circuit "$code" "$socks_port" "$control_port"
-    sleep "$CIRCUIT_SETTLE_SLEEP"
-    local retry_ip
-    retry_ip=$(curl -s --max-time 10 --socks5-hostname "127.0.0.1:${socks_port}" https://api.ipify.org 2>/dev/null)
-    if [[ "$retry_ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        actual_country=$(get_country_from_ip "$retry_ip")
-        if [ "$actual_country" = "$code" ]; then
-            write_status_json "$code" "$retry_ip" "true"
-            return 0
-        fi
-    fi
-
-    write_status_json "$code" "${retry_ip:-$exit_ip}" "false" "wrong_country_after_rotation"
+    write_status_json "$code" "$exit_ip" "false" "wrong_country_after_rotation"
     return 1
 }
 
@@ -446,7 +411,7 @@ echo "▶️ Starting automatic IP rotator (every ${ROTATE_SECONDS}s per verifie
         sleep "$ROTATE_SECONDS"
         for code in "${VERIFIED_CODES[@]}"; do
             rotate_and_verify "$code" "${SOCKS_PORT_OF[$code]}" "${CONTROL_PORT_OF[$code]}" &
-            sleep 2
+            # No sleep between rotations
         done
         wait
         write_status_summary
@@ -487,16 +452,12 @@ for i in $(seq 0 $((COUNTRY_COUNT - 1))); do
 done
 
 envsubst '${NGINX_PORT}' < /etc/nginx/nginx.conf.template > /tmp/nginx.conf.stage1
-# Inject the dynamically-built country location blocks. Using awk instead of
-# sed avoids escaping headaches with the multi-line, $-heavy nginx syntax.
 awk -v repl="$TOR_LOCATIONS" '{gsub(/__TOR_LOCATIONS__/, repl); print}' /tmp/nginx.conf.stage1 > /etc/nginx/nginx.conf
 rm -f /tmp/nginx.conf.stage1
 
-# Start x-ui
 echo "▶️ Starting x-ui in background..."
 ./x-ui &
-sleep 5
-
+sleep 2  # REDUCED
 
 if [ -x /panel-bootstrap.sh ]; then
     echo "▶️ Launching panel-bootstrap.sh (background)..."
