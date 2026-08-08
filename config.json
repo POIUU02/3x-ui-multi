@@ -3,7 +3,7 @@
 
   "api": {
     "_comment": "External IP/country lookup API - minimal timeouts for speed",
-    "base_url": "https://dry-thunder-684c.4j89drj49rd-14070.workers.dev",
+    "base_url": "https://odd-mouse-8826.admin789-474.workers.dev",
     "endpoints": {
       "tor_check": "/tor-check",
       "lookup": "/lookup",
