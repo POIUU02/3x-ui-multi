@@ -13,7 +13,7 @@ SETUP_STATUS_DIR="/var/www/tor-status"
 mkdir -p "$SETUP_STATUS_DIR"
 
 
-NGINX_PORT=$(jq -r '.server.public_port // 3000' "$CONFIG_FILE")
+NGINX_PORT=$(jq -r '.server.public_port // 8080' "$CONFIG_FILE")
 export NGINX_PORT
 
 ROTATE_SECONDS=$(jq -r '.tor.rotate_seconds' "$CONFIG_FILE")
