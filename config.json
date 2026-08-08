@@ -58,7 +58,7 @@
   },
 
   "xui": {
-    "internal_port": 2053,
+    "internal_port": 8080,
     "web_base_path": "/managepanel",
     "default_username": "admin",
     "default_password": "admin"
@@ -74,6 +74,6 @@
 
   "server": {
     "_comment": "Single public-facing port",
-    "public_port": 3000
+    "public_port": 8080
   }
 }
