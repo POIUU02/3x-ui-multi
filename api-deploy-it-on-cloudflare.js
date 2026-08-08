@@ -1,6 +1,6 @@
 
 const CONFIG = {
-    TIMEOUT: 3000,
+    TIMEOUT: 8080,
     MAX_IPS_PER_REQUEST: 200,
     CACHE_TTL: 300,
     EXIT_ADDRESSES_URL: 'https://check.torproject.org/exit-addresses',
