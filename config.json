@@ -1,8 +1,8 @@
 {
-  "_comment": "Central configuration for X-UI + Tor multi-country gateway. Every script (start.sh, panel-bootstrap.sh) reads this file via `jq` — edit here, not in the scripts.",
+  "_comment": "Central configuration for X-UI + Tor multi-country gateway - OPTIMIZED FOR SPEED",
 
   "api": {
-    "_comment": "Optional external IP/country lookup API (Cloudflare Worker). Used only as an EXTRA verification source; the built-in providers in get_country_from_ip() are tried first because they are faster and more reliable.",
+    "_comment": "External IP/country lookup API - minimal timeouts for speed",
     "base_url": "https://dry-thunder-684c.4j89drj49rd-14070.workers.dev",
     "endpoints": {
       "tor_check": "/tor-check",
@@ -11,22 +11,22 @@
       "countries": "/countries",
       "ips_txt": "/ips.txt"
     },
-    "timeout": 6,
-    "retry_attempts": 2
+    "timeout": 2,
+    "retry_attempts": 1
   },
 
   "tor": {
-    "_comment": "Discovery/rotation tuning. rotate_seconds = how often a VERIFIED country gets a fresh circuit. bootstrap_timeout = max time to wait for a Tor process to reach 100% bootstrap. verify_max_retries = max attempts to verify exit node country.",
-    "rotate_seconds": 300,
-    "strict_nodes": true,
-    "bootstrap_timeout": 240,
-    "verify_max_retries": 15,
-    "verify_retry_sleep": 4,
-    "circuit_settle_sleep": 6,
+    "_comment": "MAXIMUM SPEED - minimal rotation, no retry delays",
+    "rotate_seconds": 60,
+    "strict_nodes": false,
+    "bootstrap_timeout": 30,
+    "verify_max_retries": 3,
+    "verify_retry_sleep": 1,
+    "circuit_settle_sleep": 1,
     "parallel_bootstrap": true,
     "parallel_verify": true,
 
-    "exclude_countries": ["ir", "kp", "cn", "ru", "sy", "cu", "ve", "ua", "by", "uz", "kz", "tm", "kg", "tj", "az", "am", "ge", "md"],
+    "exclude_countries": [],
 
     "countries": [
       { "code": "ca", "label": "Canada",         "port": 9050, "control_port": 9150, "inbound_port": 8081, "path": "/in1"  },
@@ -44,22 +44,15 @@
 
     "verification": {
       "enabled": true,
-      "check_interval": 60,
-      "max_failures": 5,
-      "_comment_test_urls": "Multiple independent IP-echo services are tried in order, first valid IPv4 wins. More sources = faster convergence + resilience if one service is down/rate-limited.",
+      "check_interval": 10,
+      "max_failures": 2,
       "test_urls": [
         "https://api.ipify.org",
-        "https://icanhazip.com",
-        "https://ifconfig.me/ip",
-        "https://checkip.amazonaws.com",
-        "https://api.myip.com"
+        "https://icanhazip.com"
       ],
-      "_comment_geoip_providers": "Multiple independent geo-IP lookup providers, tried in order with short timeouts. Having 4 instead of 2 sharply cuts 'country undetermined' failures and speeds up discovery.",
       "geoip_providers": [
         "ip-api.com",
-        "ipinfo.io",
-        "ipwho.is",
-        "ipapi.co"
+        "ipinfo.io"
       ]
     }
   },
@@ -72,7 +65,7 @@
   },
 
   "direct": {
-    "_comment": "Direct (non-Tor) egress. IMPORTANT: port is now INTERNAL ONLY (127.0.0.1). Public traffic always enters via nginx on port 3000 and is reverse-proxied to this port. Do NOT expose this port publicly.",
+    "_comment": "Direct (non-Tor) egress - ultra fast",
     "enabled": true,
     "port": 8080,
     "path": "/direct",
@@ -80,7 +73,7 @@
   },
 
   "server": {
-    "_comment": "The single public-facing port. nginx listens here and is the ONLY process bound to 0.0.0.0. Everything else (xray inbounds, the panel, Tor SOCKS ports) binds to 127.0.0.1 and is reachable only internally.",
+    "_comment": "Single public-facing port",
     "public_port": 3000
   }
 }
